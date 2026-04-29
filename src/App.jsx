@@ -1,12 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from “react”;
 
-// ─── Constants ────────────────────────────────────────────────────────────────
 const CONSULTA_VALORES = { Particular: 300, Plano: 120, Retorno: 0 };
 const FORMAS_PAGAMENTO = [“PIX”, “Dinheiro”, “Cartão”];
 const STATUS_OPCOES = [“Agendado”, “Atendido”, “Faltou”];
 const CLINICA_REPASSE = 0.15;
-const STORAGE_KEY = “agenda_clinica_arianne_angela”;
-const SYNC_INTERVAL = 5000; // 5 segundos
+const SYNC_INTERVAL = 5000;
 
 const USUARIOS = {
 angela:  { senha: “angela123”,  perfil: “Secretária”, nome: “Ângela” },
@@ -49,47 +47,41 @@ const planos = pagos.filter(p => p.tipo === “Plano”).length;
 const retornos = pagos.filter(p => p.tipo === “Retorno”).length;
 const porForma = {};
 FORMAS_PAGAMENTO.forEach(f => {
-porForma[f] = pagos
-.filter(p => p.formaPagamento === f)
-.reduce((s, p) => s + (p.valorPago || 0), 0);
+porForma[f] = pagos.filter(p => p.formaPagamento === f).reduce((s, p) => s + (p.valorPago || 0), 0);
 });
 return { totalBruto, repasse, liquido, particulares, planos, retornos, porForma, totalAtendidos: atendidos.length, totalPagos: pagos.length };
 }
 
-// ─── Cloud Storage Hook ───────────────────────────────────────────────────────
+const STORAGE_KEY = “agenda_clinica_arianne_angela”;
+
 function useCloudAgenda() {
 const [agenda, setAgendaState] = useState([]);
-const [syncStatus, setSyncStatus] = useState(“connecting”); // connecting | synced | saving | error
+const [syncStatus, setSyncStatus] = useState(“connecting”);
 const [lastSync, setLastSync] = useState(null);
 const lastVersionRef = useRef(null);
+const storageKey = STORAGE_KEY + “:” + hoje();
 
-const storageKey = `${STORAGE_KEY}:${hoje()}`;
-
-// Load from cloud
 const loadFromCloud = useCallback(async (silent = false) => {
 try {
 if (!silent) setSyncStatus(“connecting”);
-const result = await window.storage.get(storageKey, true);
-const data = result ? JSON.parse(result.value) : [];
-const version = result ? result.value : “[]”;
-if (version !== lastVersionRef.current) {
-lastVersionRef.current = version;
-setAgendaState(data);
+const stored = localStorage.getItem(storageKey);
+if (stored && stored !== lastVersionRef.current) {
+lastVersionRef.current = stored;
+setAgendaState(JSON.parse(stored));
 }
 setSyncStatus(“synced”);
 setLastSync(new Date());
 } catch {
-setSyncStatus(“synced”); // key might just not exist yet
+setSyncStatus(“synced”);
 setAgendaState([]);
 }
 }, [storageKey]);
 
-// Save to cloud
 const saveToCloud = useCallback(async (newAgenda) => {
 try {
 setSyncStatus(“saving”);
 const value = JSON.stringify(newAgenda);
-await window.storage.set(storageKey, value, true);
+localStorage.setItem(storageKey, value);
 lastVersionRef.current = value;
 setSyncStatus(“synced”);
 setLastSync(new Date());
@@ -98,7 +90,6 @@ setSyncStatus(“error”);
 }
 }, [storageKey]);
 
-// Set agenda and persist
 const setAgenda = useCallback((updater) => {
 setAgendaState(prev => {
 const next = typeof updater === “function” ? updater(prev) : updater;
@@ -107,10 +98,7 @@ return next;
 });
 }, [saveToCloud]);
 
-// Initial load
 useEffect(() => { loadFromCloud(); }, [loadFromCloud]);
-
-// Poll for changes every 5s
 useEffect(() => {
 const interval = setInterval(() => loadFromCloud(true), SYNC_INTERVAL);
 return () => clearInterval(interval);
@@ -119,7 +107,6 @@ return () => clearInterval(interval);
 return { agenda, setAgenda, syncStatus, lastSync };
 }
 
-// ─── Login Screen ─────────────────────────────────────────────────────────────
 function LoginScreen({ onLogin }) {
 const [user, setUser] = useState(””);
 const [senha, setSenha] = useState(””);
@@ -135,25 +122,27 @@ return (
 <div style={{
 minHeight: “100vh”, display: “flex”, alignItems: “center”, justifyContent: “center”,
 background: “linear-gradient(135deg, #0f1923 0%, #1a2a3a 50%, #0d1f2d 100%)”,
-fontFamily: “‘DM Sans’, sans-serif”,
+fontFamily: “sans-serif”,
 }}>
 <div style={{
 background: “rgba(255,255,255,0.04)”, border: “1px solid rgba(255,255,255,0.1)”,
-borderRadius: 24, padding: “48px 40px”, width: 360,
+borderRadius: 24, padding: “48px 40px”, width: 340,
 boxShadow: “0 32px 80px rgba(0,0,0,0.5)”,
 }}>
 <div style={{ textAlign: “center”, marginBottom: 36 }}>
 <div style={{ fontSize: 44, marginBottom: 10 }}>🏥</div>
 <h1 style={{ color: “#e8f4f8”, fontSize: 22, fontWeight: 800, margin: 0 }}>Clínica</h1>
-<p style={{ color: “#6b8fa3”, fontSize: 13, margin: “6px 0 0” }}>Sistema de Gestão · Nuvem</p>
+<p style={{ color: “#6b8fa3”, fontSize: 13, margin: “6px 0 0” }}>Sistema de Gestão</p>
 </div>
 <div style={{ display: “flex”, flexDirection: “column”, gap: 14 }}>
 <input placeholder=“Usuário (arianne / angela)”
 value={user} onChange={e => { setUser(e.target.value); setErro(””); }}
-onKeyDown={e => e.key === “Enter” && handleLogin()} style={inputStyle} />
+onKeyDown={e => e.key === “Enter” && handleLogin()}
+style={inputStyle} />
 <input type=“password” placeholder=“Senha”
 value={senha} onChange={e => { setSenha(e.target.value); setErro(””); }}
-onKeyDown={e => e.key === “Enter” && handleLogin()} style={inputStyle} />
+onKeyDown={e => e.key === “Enter” && handleLogin()}
+style={inputStyle} />
 {erro && <p style={{ color: “#ff6b6b”, fontSize: 13, margin: 0, textAlign: “center” }}>{erro}</p>}
 <button onClick={handleLogin} style={btnPrimary}>Entrar</button>
 </div>
@@ -162,22 +151,17 @@ onKeyDown={e => e.key === “Enter” && handleLogin()} style={inputStyle} />
 );
 }
 
-// ─── Sync Indicator ───────────────────────────────────────────────────────────
 function SyncBadge({ status, lastSync }) {
 const config = {
 connecting: { color: “#ffb74d”, label: “conectando…” },
 saving:     { color: “#4fc3f7”, label: “salvando…” },
 synced:     { color: “#81c784”, label: “sincronizado” },
-error:      { color: “#e57373”, label: “erro de sync” },
+error:      { color: “#e57373”, label: “erro” },
 }[status] || { color: “#6b8fa3”, label: status };
 
 return (
 <div style={{ display: “flex”, alignItems: “center”, gap: 5 }}>
-<div style={{
-width: 7, height: 7, borderRadius: “50%”, background: config.color,
-boxShadow: `0 0 6px ${config.color}`,
-animation: status === “synced” ? “none” : “pulse 1s infinite”,
-}} />
+<div style={{ width: 7, height: 7, borderRadius: “50%”, background: config.color }} />
 <span style={{ fontSize: 10, color: config.color, fontWeight: 600 }}>{config.label}</span>
 {lastSync && status === “synced” && (
 <span style={{ fontSize: 10, color: “#3d5a6b” }}>
@@ -188,7 +172,6 @@ animation: status === “synced” ? “none” : “pulse 1s infinite”,
 );
 }
 
-// ─── Modal Paciente ───────────────────────────────────────────────────────────
 function ModalPaciente({ horario, paciente, onSalvar, onFechar, onRemover, isSecretaria }) {
 const [form, setForm] = useState(paciente || pacienteVazio(horario));
 
@@ -213,7 +196,7 @@ padding: 28, width: “100%”, maxWidth: 440, maxHeight: “90vh”, overflowY:
 <h3 style={{ color: “#e8f4f8”, margin: 0, fontSize: 16, fontWeight: 700 }}>
 {horario} · {paciente ? “Editar” : “Novo Paciente”}
 </h3>
-<button onClick={onFechar} style={{ background: “none”, border: “none”, color: “#6b8fa3”, cursor: “pointer”, fontSize: 22, lineHeight: 1 }}>×</button>
+<button onClick={onFechar} style={{ background: “none”, border: “none”, color: “#6b8fa3”, cursor: “pointer”, fontSize: 22 }}>×</button>
 </div>
 
 ```
@@ -253,35 +236,39 @@ padding: 28, width: “100%”, maxWidth: 440, maxHeight: “90vh”, overflowY:
         ))}
       </div>
 
-      {form.status === "Atendido" && (<>
-        <label style={labelStyle}>Pagamento</label>
-        <button onClick={() => isSecretaria && set("pago", !form.pago)} style={{
-          padding: "10px 18px", borderRadius: 10, border: "1px solid", width: "fit-content",
-          fontSize: 13, fontWeight: 700, cursor: isSecretaria ? "pointer" : "default",
-          background: form.pago ? "#43a047" : "transparent",
-          borderColor: form.pago ? "#43a047" : "rgba(255,255,255,0.12)",
-          color: form.pago ? "#fff" : "#6b8fa3",
-        }}>{form.pago ? "✓ Pago" : "Não pago"}</button>
+      {form.status === "Atendido" && (
+        <>
+          <label style={labelStyle}>Pagamento</label>
+          <button onClick={() => isSecretaria && set("pago", !form.pago)} style={{
+            padding: "10px 18px", borderRadius: 10, border: "1px solid", width: "fit-content",
+            fontSize: 13, fontWeight: 700, cursor: isSecretaria ? "pointer" : "default",
+            background: form.pago ? "#43a047" : "transparent",
+            borderColor: form.pago ? "#43a047" : "rgba(255,255,255,0.12)",
+            color: form.pago ? "#fff" : "#6b8fa3",
+          }}>{form.pago ? "✓ Pago" : "Não pago"}</button>
 
-        {form.pago && (<>
-          <label style={labelStyle}>Forma de pagamento</label>
-          <div style={{ display: "flex", gap: 8 }}>
-            {FORMAS_PAGAMENTO.map(f => (
-              <button key={f} onClick={() => isSecretaria && set("formaPagamento", f)} style={{
-                flex: 1, padding: "9px 0", borderRadius: 10, border: "1px solid",
-                fontSize: 12, fontWeight: 600, cursor: isSecretaria ? "pointer" : "default",
-                background: form.formaPagamento === f ? "#7c4dff" : "transparent",
-                borderColor: form.formaPagamento === f ? "#7c4dff" : "rgba(255,255,255,0.12)",
-                color: form.formaPagamento === f ? "#fff" : "#6b8fa3",
-              }}>{f}</button>
-            ))}
-          </div>
-          <label style={labelStyle}>Valor recebido</label>
-          <input type="number" value={form.valorPago}
-            onChange={e => isSecretaria && set("valorPago", parseFloat(e.target.value) || 0)}
-            style={inputStyle} disabled={!isSecretaria} />
-        </>)}
-      </>)}
+          {form.pago && (
+            <>
+              <label style={labelStyle}>Forma de pagamento</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                {FORMAS_PAGAMENTO.map(f => (
+                  <button key={f} onClick={() => isSecretaria && set("formaPagamento", f)} style={{
+                    flex: 1, padding: "9px 0", borderRadius: 10, border: "1px solid",
+                    fontSize: 12, fontWeight: 600, cursor: isSecretaria ? "pointer" : "default",
+                    background: form.formaPagamento === f ? "#7c4dff" : "transparent",
+                    borderColor: form.formaPagamento === f ? "#7c4dff" : "rgba(255,255,255,0.12)",
+                    color: form.formaPagamento === f ? "#fff" : "#6b8fa3",
+                  }}>{f}</button>
+                ))}
+              </div>
+              <label style={labelStyle}>Valor recebido</label>
+              <input type="number" value={form.valorPago}
+                onChange={e => isSecretaria && set("valorPago", parseFloat(e.target.value) || 0)}
+                style={inputStyle} disabled={!isSecretaria} />
+            </>
+          )}
+        </>
+      )}
 
       {isSecretaria && (
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
@@ -292,7 +279,7 @@ padding: 28, width: “100%”, maxWidth: 440, maxHeight: “90vh”, overflowY:
             }}>Remover</button>
           )}
           <button onClick={() => { if (form.nome.trim()) onSalvar(form); }} style={{ ...btnPrimary, flex: 2 }}>
-            💾 Salvar na Nuvem
+            Salvar
           </button>
         </div>
       )}
@@ -304,7 +291,6 @@ padding: 28, width: “100%”, maxWidth: 440, maxHeight: “90vh”, overflowY:
 );
 }
 
-// ─── Fechamento ───────────────────────────────────────────────────────────────
 function FechamentoDia({ agenda, onFechar }) {
 const r = calcularResumo(agenda);
 const data = new Date().toLocaleDateString(“pt-BR”, { weekday: “long”, year: “numeric”, month: “long”, day: “numeric” });
@@ -355,7 +341,7 @@ padding: 32, width: “100%”, maxWidth: 460, maxHeight: “90vh”, overflowY:
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
           <span style={{ color: "#ff8a65" }}>Repasse clínica (15%)</span>
-          <span style={{ color: "#ff8a65", fontWeight: 700 }}>− R$ {r.repasse.toFixed(2)}</span>
+          <span style={{ color: "#ff8a65", fontWeight: 700 }}>- R$ {r.repasse.toFixed(2)}</span>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.1)" }}>
           <span style={{ color: "#81c784", fontSize: 16, fontWeight: 800 }}>Seu líquido</span>
@@ -372,7 +358,6 @@ padding: 32, width: “100%”, maxWidth: 460, maxHeight: “90vh”, overflowY:
 );
 }
 
-// ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
 const [logado, setLogado] = useState(null);
 const { agenda, setAgenda, syncStatus, lastSync } = useCloudAgenda();
@@ -410,37 +395,33 @@ if (!logado) return <LoginScreen onLogin={(user, info) => setLogado({ user, …i
 const hojeLabel = new Date().toLocaleDateString(“pt-BR”, { weekday: “short”, day: “2-digit”, month: “short” });
 
 return (
-<div style={{ minHeight: “100vh”, background: “#0a1520”, fontFamily: “‘DM Sans’, sans-serif”, color: “#e8f4f8” }}>
-<style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
+<div style={{ minHeight: “100vh”, background: “#0a1520”, fontFamily: “sans-serif”, color: “#e8f4f8” }}>
+<div style={{
+background: “#0d1e2d”, borderBottom: “1px solid rgba(255,255,255,0.07)”,
+padding: “12px 16px”, position: “sticky”, top: 0, zIndex: 100,
+}}>
+<div style={{ display: “flex”, justifyContent: “space-between”, alignItems: “center”, maxWidth: 600, margin: “0 auto” }}>
+<div>
+<div style={{ fontSize: 16, fontWeight: 800 }}>🏥 Clínica · {logado.nome}</div>
+<div style={{ display: “flex”, alignItems: “center”, gap: 8, marginTop: 2 }}>
+<span style={{ fontSize: 11, color: “#6b8fa3” }}>{hojeLabel}</span>
+<SyncBadge status={syncStatus} lastSync={lastSync} />
+</div>
+</div>
+<div style={{ display: “flex”, alignItems: “center”, gap: 10 }}>
+<div style={{ textAlign: “right” }}>
+<div style={{ fontSize: 11, color: “#6b8fa3” }}>líquido</div>
+<div style={{ fontSize: 14, fontWeight: 800, color: “#81c784” }}>R$ {resumo.liquido.toFixed(0)}</div>
+</div>
+<button onClick={() => setLogado(null)} style={{
+background: “rgba(255,255,255,0.05)”, border: “1px solid rgba(255,255,255,0.1)”,
+borderRadius: 8, padding: “6px 10px”, color: “#6b8fa3”, cursor: “pointer”, fontSize: 11,
+}}>Sair</button>
+</div>
+</div>
+</div>
 
 ```
-  {/* Header */}
-  <div style={{
-    background: "#0d1e2d", borderBottom: "1px solid rgba(255,255,255,0.07)",
-    padding: "12px 16px", position: "sticky", top: 0, zIndex: 100,
-  }}>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", maxWidth: 600, margin: "0 auto" }}>
-      <div>
-        <div style={{ fontSize: 16, fontWeight: 800 }}>🏥 Clínica · {logado.nome}</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
-          <span style={{ fontSize: 11, color: "#6b8fa3" }}>{hojeLabel}</span>
-          <SyncBadge status={syncStatus} lastSync={lastSync} />
-        </div>
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 11, color: "#6b8fa3" }}>líquido</div>
-          <div style={{ fontSize: 14, fontWeight: 800, color: "#81c784" }}>R$ {resumo.liquido.toFixed(0)}</div>
-        </div>
-        <button onClick={() => setLogado(null)} style={{
-          background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
-          borderRadius: 8, padding: "6px 10px", color: "#6b8fa3", cursor: "pointer", fontSize: 11,
-        }}>Sair</button>
-      </div>
-    </div>
-  </div>
-
-  {/* Tabs */}
   <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.07)", background: "#0f1923" }}>
     {[["agenda", "🗓️ Agenda"], ["resumo", "📊 Resumo"]].map(([k, l]) => (
       <button key={k} onClick={() => setTab(k)} style={{
@@ -452,8 +433,6 @@ return (
   </div>
 
   <div style={{ padding: 16, maxWidth: 600, margin: "0 auto" }}>
-
-    {/* AGENDA */}
     {tab === "agenda" && (
       <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
         {HORARIOS.map(h => {
@@ -462,27 +441,29 @@ return (
             <div key={h} onClick={() => abrirHorario(h)} style={{
               display: "flex", alignItems: "center", gap: 12,
               background: p ? "rgba(255,255,255,0.045)" : "rgba(255,255,255,0.015)",
-              border: `1px solid ${p ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.04)"}`,
+              border: "1px solid " + (p ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.04)"),
               borderRadius: 13, padding: "11px 14px", cursor: "pointer",
             }}>
               <div style={{ width: 46, color: "#4fc3f7", fontWeight: 700, fontSize: 13, flexShrink: 0 }}>{h}</div>
-              {p ? (<>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nome}</div>
-                  <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
-                    <span style={{ fontSize: 11, color: tipoColor(p.tipo), fontWeight: 600 }}>{p.tipo}</span>
-                    <span style={{ fontSize: 11, color: "#6b8fa3" }}>·</span>
-                    <span style={{ fontSize: 11, color: "#9ab5c4" }}>R$ {p.valor}</span>
+              {p ? (
+                <>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nome}</div>
+                    <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
+                      <span style={{ fontSize: 11, color: tipoColor(p.tipo), fontWeight: 600 }}>{p.tipo}</span>
+                      <span style={{ fontSize: 11, color: "#6b8fa3" }}>·</span>
+                      <span style={{ fontSize: 11, color: "#9ab5c4" }}>R$ {p.valor}</span>
+                    </div>
                   </div>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
-                  <span style={{
-                    fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6,
-                    background: statusBg(p.status), color: statusColor(p.status),
-                  }}>{p.status}</span>
-                  {p.pago && <span style={{ fontSize: 10, color: "#81c784", fontWeight: 600 }}>✓ {p.formaPagamento}</span>}
-                </div>
-              </>) : (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6,
+                      background: statusBg(p.status), color: statusColor(p.status),
+                    }}>{p.status}</span>
+                    {p.pago && <span style={{ fontSize: 10, color: "#81c784", fontWeight: 600 }}>✓ {p.formaPagamento}</span>}
+                  </div>
+                </>
+              ) : (
                 <span style={{ color: "#3a5670", fontSize: 13 }}>{isSecretaria ? "+ Adicionar" : "Livre"}</span>
               )}
             </div>
@@ -491,15 +472,14 @@ return (
       </div>
     )}
 
-    {/* RESUMO */}
     {tab === "resumo" && (
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           {[
             ["Atendidos", resumo.totalAtendidos, "#4fc3f7"],
             ["Pagos", resumo.totalPagos, "#81c784"],
-            ["Total bruto", `R$ ${resumo.totalBruto.toFixed(0)}`, "#ffb74d"],
-            ["Líquido", `R$ ${resumo.liquido.toFixed(0)}`, "#ce93d8"],
+            ["Total bruto", "R$ " + resumo.totalBruto.toFixed(0), "#ffb74d"],
+            ["Líquido", "R$ " + resumo.liquido.toFixed(0), "#ce93d8"],
           ].map(([l, v, c]) => (
             <div key={l} style={{ ...cardStyle, textAlign: "center" }}>
               <div style={{ color: c, fontSize: 22, fontWeight: 800 }}>{v}</div>
@@ -555,7 +535,6 @@ return (
 );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const inputStyle = {
 background: “rgba(255,255,255,0.05)”, border: “1px solid rgba(255,255,255,0.1)”,
 borderRadius: 10, padding: “11px 14px”, color: “#e8f4f8”, fontSize: 14,
